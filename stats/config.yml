@@ -1,0 +1,22 @@
+tsdb:
+   tsdbIp: "52.8.104.253"
+   tsdbPort: 4343
+   interval: 3
+
+node_config_files:
+   host: "hostname"
+   memory: "/n42/proc/meminfo"
+   cpu_stats: "/n42/proc/stat"
+   cpu_load: "/n42/proc/loadavg"
+   disk: "/n42/proc/diskstats"
+   network: "/n42/proc/net/dev"
+   interface_speed: "/sys/class/net/"
+   proc: "/n42/proc/"
+   disk_root: "/n42"
+   config_json: "/config.v2.json"
+
+docker_container_config_files:
+   version: "1.10.3"
+   sys: "/sys/fs/cgroup/"
+   var: "/var/lib/docker/"
+   string: "/docker/"
