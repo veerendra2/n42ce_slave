@@ -15,5 +15,7 @@ If you don't want to include a Dockerfile in your project, it is sufficient to d
 docker run --net=host --privileged --volume=/var/lib/docker/:/var/lib/docker:ro    --volume=/:/n42/  --volume=/sys/fs/cgroup/:/sys/fs/cgroup/:ro -e key=test_key  -it --name=n42ce_slave -d  n42inc/n42ce_slave:latest
 ```
 3.Ports open on firewall :
+```
    redis: Port:6379  IP: 52.73.171.150   
    tsdb : Port:4343  IP: 52.8.104.253
+```
