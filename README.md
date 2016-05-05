@@ -6,7 +6,7 @@ This is the Git repo of the Docker [official image](https://docs.docker.com/dock
 
 
 ## How to use this image
-1.Register on n42 website [networks42.com](http://networks42.com/Demo.html)
+1.Drop a mail to <b>info@networks42.com</b> for the key
 2.Launch docker image with provided key
 
 ### Without a Dockerfile
@@ -19,3 +19,4 @@ docker run --net=host --privileged --volume=/var/lib/docker/:/var/lib/docker:ro 
    redis: Port:6379  IP: 52.73.171.150   
    tsdb : Port:4343  IP: 52.8.104.253
 ```
+4.Log into [http://54.67.112.100:8080/](http://54.67.112.100:8080/)  with provided crediantials.
