@@ -20,7 +20,7 @@ info_url="http://54.67.112.100:8161/n42-services/resources/appdiscovery/updateCo
 delete_url="http://54.67.112.100:8161/n42-services/resources/appdiscovery/deleteContainerDetails"
 dependency_url="http://54.67.112.100:8161/n42-services/resources/appdiscovery/updateContainerDependency"
 event_dictionary={"start":"started","stop":"stopped"}
-config = {'host': '52.73.171.150', 'port': 6379, 'db': 0}
+config = {'host': '54.67.112.100', 'port': 6379, 'db': 0}
 docker_path="/var/lib/docker/containers"
 
 commands={"connections":"conntrack -L -p tcp | grep 'TIME_WAIT\|ESTABLISHED\|CLOSE'",
