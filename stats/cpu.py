@@ -108,11 +108,11 @@ def main(config):
 	for key in s_c:
 		cpu_r[key] = s_c[key] - f_c[key]
 	for key in cpu_r:
-		k = "system.cpu."+key
+		k = "proc.cpu."+key
                 metrics.send(k,cpu_r[key],host=hostname)
 		print k,cpu_r[key],"host=",hostname
-	print "system.cpu.util ",(cpu_r['user']+cpu_r['system']),"host=",hostname
-	metrics.send("system.cpu.util",(cpu_r['user']+cpu_r['system']),host=hostname)
+	print "proc.cpu.util ",(cpu_r['user']+cpu_r['system']),"host=",hostname
+	metrics.send("proc.cpu.util",(cpu_r['user']+cpu_r['system']),host=hostname)
 	loadavg = cpu_loadavg(config['node_config_files']['cpu_load'])
 	for key in loadavg:
 		k = "system.load."+key
@@ -129,7 +129,7 @@ def main(config):
         systemmemshared = meminfo_dict['SwapCached']/2**10
         systemmemused = (meminfo_dict['MemTotal'] - meminfo_dict['MemFree'])/2**10
         systemmemutil = (systemmemused*100)/systemmemtotal
-        mem_dict = {'system.mem.free':systemmemfree,'system.mem.buffered':systemmembuffered,'system.mem.cached':systemmemcached,'system.mem.total':systemmemtotal,'system.mem.shared':systemmemshared,'system.mem.used':systemmemused,'system.mem.util':systemmemutil}
+        mem_dict = {'system.mem.free':systemmemfree,'system.mem.buffered':systemmembuffered,'system.mem.cached':systemmemcached,'system.mem.total':systemmemtotal,'system.mem.shared':systemmemshared,'system.mem.used':systemmemused,'mem.usage.percent':systemmemutil}
         for k,v in mem_dict.iteritems():
                 metrics.send(k,v,host=hostname)
                 print k,v,"host=",hostname
