@@ -78,7 +78,7 @@ def get_service(port_list,label):
             return label["service"]
     except Exception:
         if port_list and  port_list[0]["actual-port"] in port_dictionary.port_dict:
-            return port_list[0]["actual-port"]
+            return port_dictionary.port_dict[port_list[0]["actual-port"]]
         else:
             return "unknown"
 
