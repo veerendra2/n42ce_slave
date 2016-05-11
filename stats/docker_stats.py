@@ -8,8 +8,8 @@ metric3="mem.total"      # MB
 metric4="mem.usage.percent"  # %
 metric5="docker.net.tx"       # kB
 metric6="docker.net.rx"       # kB
-metric7="docker.block.read"   # MB
-metric8="docker.block.write"  # MB
+metric7="disk.block.read"   # MB
+metric8="disk.block.write"  # MB
 metric12="docker.rx.drops"    #
 metric13="docker.tx.drops"    #
 
