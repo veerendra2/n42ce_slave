@@ -33,7 +33,7 @@ def cpu(file_path):
         system = float(line[3])
         idle = float(line[4])
         iowait = float(line[5])
-        return {"user":user,"system":system,"idle":idle,"iowait":iowait}
+        return {"user":user,"system":system,"idle":idle,"wait.io":iowait}
 '''
 root@ubuntu:~# cat /proc/diskstats
    8       0 sda 16037 1849 811046 1118700 20922 26340 6701584 552156 0 116520 1671328
@@ -90,7 +90,7 @@ def df_parse(parse_this,disk_r):
    for line in parse_this:
      line = line.split()
      if line[5] == disk_r:
-        df_dict = {'system.disk.total':float(line[1]),'system.disk.used':float(line[2]),'system.disk.free':float(line[3]),'system.disk.util':float(line[4].split("%")[0])}
+        df_dict = {'system.disk.total':float(line[1]),'system.disk.used':float(line[2]),'system.disk.free':float(line[3]),'disk.usage.percent':float(line[4].split("%")[0])}
         return df_dict
 	
 def main(config):
@@ -115,7 +115,7 @@ def main(config):
 	metrics.send("proc.cpu.util",(cpu_r['user']+cpu_r['system']),host=hostname)
 	loadavg = cpu_loadavg(config['node_config_files']['cpu_load'])
 	for key in loadavg:
-		k = "system.load."+key
+		k = "proc.cpu.load.avg."+key
 		print k,loadavg[key],"host="+hostname
 		metrics.send(k,loadavg[key],host=hostname)
         #memory
@@ -129,7 +129,7 @@ def main(config):
         systemmemshared = meminfo_dict['SwapCached']/2**10
         systemmemused = (meminfo_dict['MemTotal'] - meminfo_dict['MemFree'])/2**10
         systemmemutil = (systemmemused*100)/systemmemtotal
-        mem_dict = {'system.mem.free':systemmemfree,'system.mem.buffered':systemmembuffered,'system.mem.cached':systemmemcached,'system.mem.total':systemmemtotal,'system.mem.shared':systemmemshared,'system.mem.used':systemmemused,'mem.usage.percent':systemmemutil}
+        mem_dict = {'mem.free':systemmemfree,'mem.buffered':systemmembuffered,'mem.cached':systemmemcached,'mem.total':systemmemtotal,'mem.shared':systemmemshared,'mem.used':systemmemused,'mem.usage.percent':systemmemutil}
         for k,v in mem_dict.iteritems():
                 metrics.send(k,v,host=hostname)
                 print k,v,"host=",hostname
@@ -146,8 +146,8 @@ def main(config):
 		metrics.send("system.io.writes",writes,device=s_d[dev]['dev'],host=hostname)
                 metrics.send("system.io.rb_s",rd_sectors,device=s_d[dev]['dev'],host=hostname)
                 metrics.send("system.io.wb_s",wr_sectors,device=s_d[dev]['dev'],host=hostname)
-                print "system.io.reads",reads,"device=",s_d[dev]['dev'],"host="+hostname #read requests issued to the device per second
-		print "system.io.writes",writes,"device=",s_d[dev]['dev'],"host="+hostname #write requests issued to the device per second
+                print "disk.block.read",reads,"device=",s_d[dev]['dev'],"host="+hostname #read requests issued to the device per second
+		print "disk.block.write",writes,"device=",s_d[dev]['dev'],"host="+hostname #write requests issued to the device per second
 		print "system.io.rb_s",rd_sectors,"device=",s_d[dev]['dev'],"host="+hostname # bytes reads to the device per second
 		print "system.io.wb_s",wr_sectors,"device=",s_d[dev]['dev'],"host="+hostname # bytes  writes to the device per second
 	
