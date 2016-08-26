@@ -27,7 +27,7 @@ commands={"connections":"conntrack -L -p tcp | grep 'TIME_WAIT\|ESTABLISHED\|CLO
             "interface_ips":"ip addr | grep -w inet",
             "bridges":"brctl show",
             "bridges_ips":"ip addr show {} | grep -w inet"}
-
+            
 files={"tcp_stats":"/proc/net/tcp",
        "docker-info":"/var/lib/docker/containers/{}/config.v2.json",
        "containers":"/var/lib/docker/containers"}
