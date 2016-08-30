@@ -2,9 +2,10 @@
 Author: Networks42
 Description: Finds Dependencies between the docker containers
 '''
-import os,subprocess,time,json,redis,ast,traceback
+import os,time,json,redis,ast,traceback
 import requests,datetime
 import netifaces
+import pynetfilter_conntrack
 from pybrctl import BridgeController
 #Local Dictionary
 import port_dictionary
@@ -12,7 +13,7 @@ import port_dictionary
 interval=300
 hostname=os.uname()[1]
 base_path=os.path.dirname(os.path.abspath(__file__))
-tenant_name="carbon"  #os.environ['key']
+tenant_name=os.environ['key']
 interface_ip_list=list()
 bridges_ip=list()
 local_container_data=dict()
@@ -71,7 +72,6 @@ def get_service(port_list,label):
             return "unknown"
 
 def set_docker_info():
-    print "Docker Info Time-->",int(round(time.time()*1000))
     global interface_ip_list, host_dicts, local_container_data, docker_info
     global_container_data=dict()
     container_id=os.listdir(files["containers"])# Get the List of Container IDS
@@ -101,7 +101,6 @@ def set_docker_info():
                     ip_addresses.append(v1["IPAddress"])
                 service_name=get_service(port_list,data["Config"]["Labels"])
                 docker_info.append({"cid":ids[:12],"cname":data["Name"].lstrip("/"),"hostname":hostname,"pid":data["State"]["Pid"],"ip":ip_addresses,"image":data["Config"]["Image"],"Tenant_Name":tenant_name,"labels":data["Config"]["Labels"],"service":service_name})
-    print "Docker Info End Time-->",int(round(time.time()*1000))
     json_data=json.dumps(docker_info)              
     r = redis.StrictRedis(**config)
     r.hset(tenant_name+"-info",hostname,global_container_data)
@@ -118,22 +117,19 @@ def set_docker_info():
 def analyse_traffic():
     global host_dicts,local_container_data
     neighbors=set()
-    file=execuite_cmd("conntrack -L -p tcp | grep -v UNREPLIED |grep 'TIME_WAIT\|ESTABLISHED\|CLOSE'")
-    for line in file.split("\n"):
-        if line and "127.0.0.1" not in line and "tcp" in line:
-            line_list= line.split()
-            src_ip1=line_list[4].split("=")[1]
-            dst_ip1=line_list[5].split("=")[1]
-            #src_port1=line_list[6].split("=")[1]
-            dst_port1=line_list[7].split("=")[1]
-            
-            src_ip2=line_list[8].split("=")[1]
-            dst_ip2=line_list[9].split("=")[1]
-            #src_port2=line_list[10].split("=")[1]
-            #dst_port2=line_list[11].split("=")[1]
-            if src_ip1 in bridges_ip and dst_ip2 in bridges_ip:
-                continue #Packets coming from docker0(Default Gateway)
-            elif dst_ip1+":"+dst_port1 in host_dicts and src_ip1 in local_container_data:
+    container_in_dep=set()
+    ct = pynetfilter_conntrack.Conntrack()
+    for item in ct.dump_table(netifaces.AF_INET)[0]:
+        if (str(item.orig_ipv4_src) not in bridges_ip and str(item.repl_ipv4_dst) not in bridges_ip) or "127.0.0.1"  not in str(item.orig_ipv4_src) or "127.0.0.1" not in str(item.orig_ipv4_dst):
+            src_ip1=str(item.orig_ipv4_src)
+            dst_ip1=str(item.orig_ipv4_dst)
+            #src_port1=str(item.orig_port_src)
+            dst_port1=str(item.orig_port_dst)
+            src_ip2=str(item.repl_ipv4_src)
+            dst_ip2=str(item.repl_ipv4_dst)
+            #src_port2=str(item.repl_port_src)
+            #dst_port2=str(item.repl_port_dst)
+            if dst_ip1+":"+dst_port1 in host_dicts and src_ip1 in local_container_data:
                 if src_ip1 in local_container_data and dst_ip1+":"+dst_port1 in host_dicts:
                     src_con=local_container_data[src_ip1][1]
                     dst_con=host_dicts[dst_ip1+":"+dst_port1]["cid"]
@@ -163,7 +159,6 @@ def analyse_traffic():
                     else:
                         service="Unknown:{0}".format(port)
                     neighbors.add(src_con+"-"+dst_con+"-"+service)
-                           
     dependency=list()
     for key in neighbors:
         part=key.split("-")
@@ -173,20 +168,14 @@ def analyse_traffic():
               "srctenant":tenant_name,
               "dsttenant":tenant_name}
         dependency.append(data)
+    json_data=json.dumps(dependency)
     print "=================== Docker Dependencies ===================\n"
-    if not dependency:
-        json_data=json.dumps([{"tenant":tenant_name}])
-        print "No Traffic Found!"
-    else:
-        json_data=json.dumps(dependency)
     print json_data
-    try:
-        response = requests.post(dependency_url, data=json_data,headers=headers)
-    except Exception:
-        print "*****Connection Problem at REST API. Will retry in 30 Sec"
-        time.sleep(30)
-        raise Exception
-    print response    
+    print "\nSending data to API",int(time.time())
+    response = requests.post(dependency_url, data=json_data,headers=headers)
+    print "\nData Sent!",int(time.time())
+    print response
+    
                   
 while True:
     try:
@@ -200,6 +189,5 @@ while True:
         print "================ Something Went Wrong. TRACEBACK BELOW ================\n"
         print traceback.format_exc()
         print "\nTIMESTAMP",datetime.datetime.now(),"\n"
-
 
 
