@@ -2,9 +2,14 @@
 Author: Networks42
 Description: Finds Dependencies between the docker containers
 '''
-import os,subprocess,time,re,json,redis,ast,traceback
-import port_dictionary
+import os,time,json,redis,ast,traceback
 import requests,datetime
+import netifaces
+import docker
+import pynetfilter_conntrack
+from pybrctl import BridgeController
+#Local Imports
+import port_dictionary
 
 hostname=os.uname()[1]
 base_path=os.path.dirname(os.path.abspath(__file__))
@@ -15,25 +20,17 @@ local_container_data=dict()
 host_dicts=dict()#{<Interface_IP>-<MAP-Port>:[ip,cid,cname,]}
 docker_info=list()
 
+config = {'host': '52.8.104.253', 'port': 6379, 'db': 0}
 headers = {'content-type': 'application/json'}
 info_url="http://52.8.104.253:8161/n42-services/resources/appdiscovery/updateContainerDetails"
 delete_url="http://52.8.104.253:8161/n42-services/resources/appdiscovery/deleteContainerDetails"
 dependency_url="http://52.8.104.253:8161/n42-services/resources/appdiscovery/updateContainerDependency"
 event_dictionary={"start":"started","stop":"stopped"}
-config = {'host': '52.8.104.253', 'port': 6379, 'db': 0}
-docker_path="/var/lib/docker/containers"
+listen_events = ["start","stop"]
 
-commands={"connections":"conntrack -L -p tcp | grep 'TIME_WAIT\|ESTABLISHED\|CLOSE'",
-            "interface_ips":"ip addr | grep -w inet",
-            "bridges":"brctl show",
-            "bridges_ips":"ip addr show {} | grep -w inet"}
-            
 files={"tcp_stats":"/proc/net/tcp",
        "docker-info":"/var/lib/docker/containers/{}/config.v2.json",
        "containers":"/var/lib/docker/containers"}
-
-def execuite_cmd(cmd):
-    return subprocess.check_output(cmd,shell=True)
 
 def wipe_varibles():
     global docker_info,host_dicts,local_container_data,bridges_ip,interface_ip_list
@@ -51,27 +48,17 @@ def merge_dicts(*dict_args):
 
 def set_interface_ips():
     global interface_ip_list, bridges_ip
-    output1=execuite_cmd(commands["interface_ips"])
-    output2=execuite_cmd(commands["bridges"])
-    for line in output1.split("\n"):
-        if not line or re.search(' lo', line):
-            continue
-        ip=line.split()[1].split("/")[0]
-        interface_ip_list.append(ip)
-    
-    for line in output2.split("\n"):
-        if not line or re.search("bridge name", line):
-            continue
-        parts=line.split()
-        if len(parts)>2:
-            try:
-                output2=execuite_cmd(commands["bridges_ips"].format(parts[0]))
-            except Exception:
-                continue
-            b_ip=output2.split()[1].split("/")[0]
-            interface_ip_list.remove(b_ip)
-            bridges_ip.append(b_ip)
-
+    brctl = BridgeController()
+    bridge_iface=list()
+    _bridge_names=list()
+    for iface in brctl.showall():
+        _bridge_names=str(iface)
+        bridges_ip.append(netifaces.ifaddresses(str(iface))[2][0]["addr"])
+    for iface1 in netifaces.interfaces():
+        iface_atri=netifaces.ifaddresses(iface1).keys()
+        if iface1 not in _bridge_names and 2 in iface_atri:
+            interface_ip_list.append(netifaces.ifaddresses(iface1)[2][0]["addr"])
+        
 def get_service(port_list,label):
     try:
         if label:
@@ -115,7 +102,6 @@ def set_docker_info():
     json_data=json.dumps(docker_info)              
     r = redis.StrictRedis(**config)
     r.hset(tenant_name+"-info",hostname,global_container_data)
-    time.sleep(3)
     cluster_info=r.hgetall(tenant_name+"-info")
     for x in cluster_info.values():
         host_dicts.update(ast.literal_eval(x))
@@ -124,26 +110,22 @@ def set_docker_info():
     response = requests.post(info_url, data=json_data,headers=headers)
     print response,"\n"
   
-def parse_contrack():
+def analyse_traffic():
     global host_dicts,local_container_data
     neighbors=set()
     container_in_dep=set()
-    file=execuite_cmd(commands["connections"])
-    for line in file.split("\n"):
-        if line and "127.0.0.1" not in line and "tcp" in line:
-            line_list= line.split()
-            src_ip1=line_list[4].split("=")[1]
-            dst_ip1=line_list[5].split("=")[1]
-            #src_port1=line_list[6].split("=")[1]
-            dst_port1=line_list[7].split("=")[1]
-            
-            src_ip2=line_list[8].split("=")[1]
-            dst_ip2=line_list[9].split("=")[1]
-            #src_port2=line_list[10].split("=")[1]
-            #dst_port2=line_list[11].split("=")[1]
-            if src_ip1 in bridges_ip and dst_ip2 in bridges_ip:
-                continue #Packets coming from docker0(Default Gateway)
-            elif dst_ip1+":"+dst_port1 in host_dicts and src_ip1 in local_container_data:
+    ct = pynetfilter_conntrack.Conntrack()
+    for item in ct.dump_table(netifaces.AF_INET)[0]:
+        if (str(item.orig_ipv4_src) not in bridges_ip and str(item.repl_ipv4_dst) not in bridges_ip) or "127.0.0.1"  not in str(item.orig_ipv4_src) or "127.0.0.1" not in str(item.orig_ipv4_dst):
+            src_ip1=str(item.orig_ipv4_src)
+            dst_ip1=str(item.orig_ipv4_dst)
+            #src_port1=str(item.orig_port_src)
+            dst_port1=str(item.orig_port_dst)
+            src_ip2=str(item.repl_ipv4_src)
+            dst_ip2=str(item.repl_ipv4_dst)
+            #src_port2=str(item.repl_port_src)
+            #dst_port2=str(item.repl_port_dst)
+            if dst_ip1+":"+dst_port1 in host_dicts and src_ip1 in local_container_data:
                 if src_ip1 in local_container_data and dst_ip1+":"+dst_port1 in host_dicts:
                     src_con=local_container_data[src_ip1][1]
                     dst_con=host_dicts[dst_ip1+":"+dst_port1]["cid"]
@@ -193,7 +175,7 @@ def find_new_flow(cid):
     counter=5
     while counter>=1:
         time.sleep(20)
-        dep=parse_contrack()
+        dep=analyse_traffic()
         if cid in dep[1]:
             print "Found new container's traffic :-)\n" 
             json_data=json.dumps(dep[0])
@@ -204,45 +186,30 @@ def find_new_flow(cid):
             return
         counter=counter-1
         print "Still not found any new Container"
-    
-def receive(channel):
-    global hostnames,host_dicts
-    while True:
+
+def swarm_events():
+    cli=docker.Client("0.0.0.0:4341")
+    events = cli.events(decode=True)
+    print "Listening to Docker events on the port: 4342"
+    for event in events:
         try:
-            r = redis.StrictRedis(**config)
-            pubsub = r.pubsub()
-            pubsub.subscribe(channel)
-            print '\n***** Listening to the channel {channel} *****'.format(**locals())
-        except Exception:
-            print traceback.format_exc()
-            print "\nThere seem to be connection problem! :-( Retrying in 5 Seconds..."
-            time.sleep(5)
-            continue
-        for item in pubsub.listen():
-            try:
-                if item["type"]=="subscribe":
-                    print "\nSubscribed to the channel <===========>",item["channel"]
-                if item["type"] == "message":
-                    print "\nIncoming notification from the channel <------",item["channel"],"\n"
-                    formated_json=ast.literal_eval(item['data'])
-                    if formated_json['action']=="start":
-                        print formated_json,"\n"
-                        print "A Container({0}) was {1} in {2}".format(formated_json['cname'],event_dictionary[formated_json['action']],formated_json['node_name'])
-                        find_new_flow(formated_json['cid'])
-                    if formated_json['action']=="stop":
-                        print "A Container({0}) was {1} in {2}".format(formated_json['cname'],event_dictionary[formated_json['action']],formated_json['node_name'])    
-                        if formated_json['node_name'] == hostname:
-                            json_data=json.dumps({"id":formated_json['cid']})
-                            print json_data
-                            response = requests.post(delete_url, data=json_data,headers=headers)
-                            print response
+            if str(event['Action']) == "start":
+                print str(str(event['Actor']['Attributes']['name'])),"launched!"
+                find_new_flow(str(event['id'][:12]))
+                wipe_varibles()
+            elif str(event["Action"]) == "stop":
+                print str(str(event['Actor']['Attributes']['name'])),"stopped!"
+                json_data=json.dumps({"id":str(event['id'][:12])})
+                print json_data
+                response = requests.post(delete_url, data=json_data,headers=headers)
+                print response
                 wipe_varibles()
                 print "Completed at",datetime.datetime.now()
-            except Exception:
-                print "================ Something Went Wrong. TRACEBACK BELOW ================\n"
-                print traceback.format_exc()
-                print "-TIMESTAMP",datetime.datetime.now()
+        except:
+            print "================ Something Went Wrong. TRACEBACK BELOW ================\n"
+            print traceback.format_exc()
+            print "-TIMESTAMP",datetime.datetime.now()
                    
 if __name__ == '__main__':
-    receive(tenant_name+"-info")
+    swarm_events()
 
