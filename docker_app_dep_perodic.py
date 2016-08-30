@@ -2,7 +2,7 @@
 Author: Networks42
 Description: Finds Dependencies between the docker containers
 '''
-import os,time,json,redis,ast,traceback
+import os,subprocess,time,json,redis,ast,traceback
 import requests,datetime
 import netifaces
 import pynetfilter_conntrack
@@ -119,20 +119,22 @@ def set_docker_info():
 def analyse_traffic():
     global host_dicts,local_container_data
     neighbors=set()
-    container_in_dep=set()
-    ct = pynetfilter_conntrack.Conntrack()
-    for item in ct.dump_table(netifaces.AF_INET)[0]:
-        print "Start of Loop time",int(round(time.time()*1000))
-        if (str(item.orig_ipv4_src) not in bridges_ip and str(item.repl_ipv4_dst) not in bridges_ip) or "127.0.0.1"  not in str(item.orig_ipv4_src) or "127.0.0.1" not in str(item.orig_ipv4_dst):
-            src_ip1=str(item.orig_ipv4_src)
-            dst_ip1=str(item.orig_ipv4_dst)
-            #src_port1=str(item.orig_port_src)
-            dst_port1=str(item.orig_port_dst)
-            src_ip2=str(item.repl_ipv4_src)
-            dst_ip2=str(item.repl_ipv4_dst)
-            #src_port2=str(item.repl_port_src)
-            #dst_port2=str(item.repl_port_dst)
-            if dst_ip1+":"+dst_port1 in host_dicts and src_ip1 in local_container_data:
+    file=execuite_cmd("conntrack -L -p tcp | grep -v UNREPLIED |grep 'TIME_WAIT\|ESTABLISHED\|CLOSE'")
+    for line in file.split("\n"):
+        if line and "127.0.0.1" not in line and "tcp" in line:
+            line_list= line.split()
+            src_ip1=line_list[4].split("=")[1]
+            dst_ip1=line_list[5].split("=")[1]
+            #src_port1=line_list[6].split("=")[1]
+            dst_port1=line_list[7].split("=")[1]
+            
+            src_ip2=line_list[8].split("=")[1]
+            dst_ip2=line_list[9].split("=")[1]
+            #src_port2=line_list[10].split("=")[1]
+            #dst_port2=line_list[11].split("=")[1]
+            if src_ip1 in bridges_ip and dst_ip2 in bridges_ip:
+                continue #Packets coming from docker0(Default Gateway)
+            elif dst_ip1+":"+dst_port1 in host_dicts and src_ip1 in local_container_data:
                 if src_ip1 in local_container_data and dst_ip1+":"+dst_port1 in host_dicts:
                     src_con=local_container_data[src_ip1][1]
                     dst_con=host_dicts[dst_ip1+":"+dst_port1]["cid"]
@@ -162,7 +164,7 @@ def analyse_traffic():
                     else:
                         service="Unknown:{0}".format(port)
                     neighbors.add(src_con+"-"+dst_con+"-"+service)
-        print "End of Loop Time-->",int(round(time.time() * 1000))
+                           
     dependency=list()
     for key in neighbors:
         part=key.split("-")
@@ -172,14 +174,20 @@ def analyse_traffic():
               "srctenant":tenant_name,
               "dsttenant":tenant_name}
         dependency.append(data)
-    json_data=json.dumps(dependency)
     print "=================== Docker Dependencies ===================\n"
+    if not dependency:
+        json_data=json.dumps([{"tenant":tenant_name}])
+        print "No Traffic Found!"
+    else:
+        json_data=json.dumps(dependency)
     print json_data
-    print "\n Sending data to API",int(time.time())
-    response = requests.post(dependency_url, data=json_data,headers=headers)
-    print "\n Data Sent!",int(time.time())
-    print response
-    
+    try:
+        response = requests.post(dependency_url, data=json_data,headers=headers)
+    except Exception:
+        print "*****Connection Problem at REST API. Will retry in 30 Sec"
+        time.sleep(30)
+        raise Exception
+    print response    
                   
 while True:
     try:
