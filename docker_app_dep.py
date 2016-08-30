@@ -2,17 +2,18 @@
 Author: Networks42
 Description: Finds Dependencies between the docker containers
 '''
-import os,subprocess,time,json,redis,ast,traceback
+import os,time,json,redis,ast,traceback
 import requests,datetime
 import netifaces
 import docker
+import pynetfilter_conntrack
 from pybrctl import BridgeController
 #Local Imports
 import port_dictionary
 
 hostname=os.uname()[1]
 base_path=os.path.dirname(os.path.abspath(__file__))
-tenant_name="Carbon"  #os.environ['key']
+tenant_name=os.environ['key']
 interface_ip_list=list()
 bridges_ip=list()
 local_container_data=dict()
@@ -30,9 +31,6 @@ listen_events = ["start","stop"]
 files={"tcp_stats":"/proc/net/tcp",
        "docker-info":"/var/lib/docker/containers/{}/config.v2.json",
        "containers":"/var/lib/docker/containers"}
-
-def execuite_cmd(cmd):
-    return subprocess.check_output(cmd,shell=True)
 
 def wipe_varibles():
     global docker_info,host_dicts,local_container_data,bridges_ip,interface_ip_list
@@ -105,11 +103,6 @@ def set_docker_info():
     r = redis.StrictRedis(**config)
     r.hset(tenant_name+"-info",hostname,global_container_data)
     cluster_info=r.hgetall(tenant_name+"-info")
-    print "+++++++++++++++++++++++"
-    print global_container_data
-    print "***********************"
-    print cluster_info
-    print "***********************"
     for x in cluster_info.values():
         host_dicts.update(ast.literal_eval(x))
     print "=================== Docker Info ===================\n"
@@ -121,22 +114,18 @@ def analyse_traffic():
     global host_dicts,local_container_data
     neighbors=set()
     container_in_dep=set()
-    file=execuite_cmd("conntrack -L -p tcp | grep -v UNREPLIED |grep 'TIME_WAIT\|ESTABLISHED\|CLOSE'")
-    for line in file.split("\n"):
-        if line and "127.0.0.1" not in line and "tcp" in line:
-            line_list= line.split()
-            src_ip1=line_list[4].split("=")[1]
-            dst_ip1=line_list[5].split("=")[1]
-            #src_port1=line_list[6].split("=")[1]
-            dst_port1=line_list[7].split("=")[1]
-            
-            src_ip2=line_list[8].split("=")[1]
-            dst_ip2=line_list[9].split("=")[1]
-            #src_port2=line_list[10].split("=")[1]
-            #dst_port2=line_list[11].split("=")[1]
-            if src_ip1 in bridges_ip and dst_ip2 in bridges_ip:
-                continue #Packets coming from docker0(Default Gateway)
-            elif dst_ip1+":"+dst_port1 in host_dicts and src_ip1 in local_container_data:
+    ct = pynetfilter_conntrack.Conntrack()
+    for item in ct.dump_table(netifaces.AF_INET)[0]:
+        if (str(item.orig_ipv4_src) not in bridges_ip and str(item.repl_ipv4_dst) not in bridges_ip) or "127.0.0.1"  not in str(item.orig_ipv4_src) or "127.0.0.1" not in str(item.orig_ipv4_dst):
+            src_ip1=str(item.orig_ipv4_src)
+            dst_ip1=str(item.orig_ipv4_dst)
+            #src_port1=str(item.orig_port_src)
+            dst_port1=str(item.orig_port_dst)
+            src_ip2=str(item.repl_ipv4_src)
+            dst_ip2=str(item.repl_ipv4_dst)
+            #src_port2=str(item.repl_port_src)
+            #dst_port2=str(item.repl_port_dst)
+            if dst_ip1+":"+dst_port1 in host_dicts and src_ip1 in local_container_data:
                 if src_ip1 in local_container_data and dst_ip1+":"+dst_port1 in host_dicts:
                     src_con=local_container_data[src_ip1][1]
                     dst_con=host_dicts[dst_ip1+":"+dst_port1]["cid"]
@@ -181,6 +170,7 @@ def analyse_traffic():
     return [dependency,container_in_dep]
     
 def find_new_flow(cid):
+    set_interface_ips()
     set_docker_info()
     counter=5
     while counter>=1:
@@ -198,7 +188,6 @@ def find_new_flow(cid):
         print "Still not found any new Container"
 
 def swarm_events():
-    set_interface_ips()
     cli=docker.Client("0.0.0.0:4342")
     events = cli.events(decode=True)
     print "Listening to Docker events on the port: 4342"
@@ -223,4 +212,3 @@ def swarm_events():
                    
 if __name__ == '__main__':
     swarm_events()
-
