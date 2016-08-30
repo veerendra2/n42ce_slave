@@ -1,6 +1,6 @@
 FROM ubuntu:latest
 MAINTAINER Networks42
-RUN apt-get update && apt-get install -y supervisor python2.7 python-pip curl vim python-dev
+RUN apt-get update && apt-get install -y supervisor python2.7 python-pip curl vim python-dev conntrack bridge-utils
 RUN pip install potsdb redis docker-py pyyaml ipy netifaces pynetfilter_conntrack pybrctl
 #packetbeat
 RUN apt-get install -y libpcap0.8
