@@ -5,7 +5,6 @@ Description: Finds Dependencies between the docker containers
 import os,subprocess,time,json,redis,ast,traceback
 import requests,datetime
 import netifaces
-import pynetfilter_conntrack
 from pybrctl import BridgeController
 #Local Dictionary
 import port_dictionary
