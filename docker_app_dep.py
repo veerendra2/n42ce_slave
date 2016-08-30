@@ -6,7 +6,6 @@ import os,subprocess,time,json,redis,ast,traceback
 import requests,datetime
 import netifaces
 import docker
-import pynetfilter_conntrack
 from pybrctl import BridgeController
 #Local Imports
 import port_dictionary
