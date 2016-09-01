@@ -1,6 +1,6 @@
 '''
 Author: Networks42
-Description: Finds Dependencies between the docker containers
+Description: Finds Dependencies between the docker containers(Runs every 5m)
 '''
 import os,time,json,redis,ast,traceback
 import requests,datetime
@@ -12,7 +12,6 @@ import port_dictionary
 
 interval=300
 hostname=os.uname()[1]
-base_path=os.path.dirname(os.path.abspath(__file__))
 tenant_name=os.environ['key']
 interface_ip_list=list()
 bridges_ip=list()
@@ -109,10 +108,10 @@ def set_docker_info():
         host_dicts.update(ast.literal_eval(x))
     print "=================== Docker Info ===================\n"
     print json_data
-    print "\n Sending data",int(time.time())
+    print "\n",int(time.time())
     response = requests.post(info_url, data=json_data,headers=headers)
-    print "\n Data Sent!",int(time.time())
-    print response,"\n"
+    print response
+    print int(time.time())
   
 def analyse_traffic():
     global host_dicts,local_container_data
@@ -129,7 +128,7 @@ def analyse_traffic():
             dst_ip2=str(item.repl_ipv4_dst)
             #src_port2=str(item.repl_port_src)
             #dst_port2=str(item.repl_port_dst)
-            if dst_ip1+":"+dst_port1 in host_dicts and src_ip1 in local_container_data:
+            if dst_ip1+":"+dst_port1 in host_dicts and src_ip1 in local_container_data: ## Local Container to Other Node's Container
                 if src_ip1 in local_container_data and dst_ip1+":"+dst_port1 in host_dicts:
                     src_con=local_container_data[src_ip1][1]
                     dst_con=host_dicts[dst_ip1+":"+dst_port1]["cid"]
@@ -140,7 +139,7 @@ def analyse_traffic():
                         service="Unknown:{0}".format(port)
                     neighbors.add(src_con+"-"+dst_con+"-"+service)         
             
-            elif src_ip1 in local_container_data and dst_ip1 in local_container_data:
+            elif src_ip1 in local_container_data and dst_ip1 in local_container_data:  #Local Container to Local Container
                 if src_ip1 in local_container_data and dst_ip1 in local_container_data:
                     src_con=local_container_data[src_ip1][1]
                     dst_con=local_container_data[dst_ip1][1]
@@ -149,7 +148,8 @@ def analyse_traffic():
                     else:
                         service="Unknown:{0}".format(port)
                     neighbors.add(src_con+"-"+dst_con+"-"+service)
-            elif dst_ip1+":"+dst_port1 in host_dicts and src_ip1 not in local_container_data:
+                    
+            elif dst_ip1+":"+dst_port1 in host_dicts and src_ip1 not in local_container_data:  ## Outside traffic to Local Container's Exposed Port
                 if src_ip2 in local_container_data:
                     src_con="UNKNOWN"
                     dst_con=host_dicts[dst_ip1+":"+dst_port1]["cid"]
@@ -171,19 +171,18 @@ def analyse_traffic():
     json_data=json.dumps(dependency)
     print "=================== Docker Dependencies ===================\n"
     print json_data
-    print "\nSending data to API",int(time.time())
+    print "\n",int(time.time())
     response = requests.post(dependency_url, data=json_data,headers=headers)
-    print "\nData Sent!",int(time.time())
     print response
+    print int(time.time())
     
-                  
 while True:
     try:
         set_interface_ips()
         set_docker_info()
         analyse_traffic()
         wipe_varibles()
-        print "Completed at",datetime.datetime.now()
+        print "Completed",datetime.datetime.now()
         time.sleep(interval)
     except Exception:
         print "================ Something Went Wrong. TRACEBACK BELOW ================\n"
