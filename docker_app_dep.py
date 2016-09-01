@@ -1,6 +1,6 @@
 '''
 Author: Networks42
-Description: Finds Dependencies between the docker containers
+Description: Finds Dependencies between the docker containers(Triggred by docker events)
 '''
 import os,time,json,redis,ast,traceback
 import requests,datetime
@@ -12,7 +12,6 @@ from pybrctl import BridgeController
 import port_dictionary
 
 hostname=os.uname()[1]
-base_path=os.path.dirname(os.path.abspath(__file__))
 tenant_name=os.environ['key']
 interface_ip_list=list()
 bridges_ip=list()
@@ -25,7 +24,6 @@ headers = {'content-type': 'application/json'}
 info_url="http://52.8.104.253:8161/n42-services/resources/appdiscovery/updateContainerDetails"
 delete_url="http://52.8.104.253:8161/n42-services/resources/appdiscovery/deleteContainerDetails"
 dependency_url="http://52.8.104.253:8161/n42-services/resources/appdiscovery/updateContainerDependency"
-event_dictionary={"start":"started","stop":"stopped"}
 listen_events = ["start","stop"]
 
 files={"tcp_stats":"/proc/net/tcp",
@@ -172,7 +170,7 @@ def analyse_traffic():
 def find_new_flow(cid):
     set_interface_ips()
     set_docker_info()
-    counter=5
+    counter=4
     while counter>=1:
         time.sleep(20)
         dep=analyse_traffic()
@@ -188,15 +186,20 @@ def find_new_flow(cid):
         print "Still not found any new Container"
 
 def swarm_events():
-    cli=docker.Client("0.0.0.0:4342")
-    events = cli.events(decode=True)
-    print "Listening to Docker events on the port: 4342"
+    try:
+        cli=docker.Client("0.0.0.0:4342")
+        events = cli.events(decode=True)
+    except:
+        print "Docker process binded on 4342 port? Please check! Exiting..."
+        sys.exit()
+    print "Listening Docker events on the port: 4342"
     for event in events:
         try:
             if str(event['Action']) == "start":
                 print str(str(event['Actor']['Attributes']['name'])),"launched!"
                 find_new_flow(str(event['id'][:12]))
                 wipe_varibles()
+                print "Completed",datetime.datetime.now()
             elif str(event["Action"]) == "stop":
                 print str(str(event['Actor']['Attributes']['name'])),"stopped!"
                 json_data=json.dumps({"id":str(event['id'][:12])})
@@ -204,7 +207,7 @@ def swarm_events():
                 response = requests.post(delete_url, data=json_data,headers=headers)
                 print response
                 wipe_varibles()
-                print "Completed at",datetime.datetime.now()
+                print "Completed",datetime.datetime.now()
         except:
             print "================ Something Went Wrong. TRACEBACK BELOW ================\n"
             print traceback.format_exc()
