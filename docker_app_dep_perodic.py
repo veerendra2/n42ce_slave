@@ -22,7 +22,7 @@ docker_info=list()
 headers = {'content-type': 'application/json'}
 info_url="http://52.8.104.253:8161/n42-services/resources/appdiscovery/updateContainerDetails"
 delete_url="http://52.8.104.253:8161/n42-services/resources/appdiscovery/deleteContainerDetails"
-dependency_url="http://52.8.104.253:8161/n42-services/resources/appdiscovery/updateContainerDependency"
+dependency_url="http://52.8.104.253:8161/n42-cas-services/resources/appdiscovery/updateContainerDependency"
 event_dictionary={"start":"started","stop":"stopped"}
 config = {'host': '52.8.104.253', 'port': 6379, 'db': 0}
 
