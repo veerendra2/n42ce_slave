@@ -41,7 +41,11 @@ def read_file(file_name,line_no,split_no=None):
         if value and not split_no:
             return value
         elif value and split_no:
-            return value.split()[split_no]
+            try:
+                var=value.split()[split_no]
+            except:
+                var=0
+            return var
         else:
             return 0
     else:
@@ -73,7 +77,6 @@ def get_all_values():
             sys_cpu = 0
             for i in sys_cpu_l[1:]:
                 sys_cpu = sys_cpu + int(i)
-
             docker_io_read = float(read_file(docker_io_f,1,2))
             docker_io_write = float(read_file(docker_io_f,2,2))
 
@@ -148,6 +151,4 @@ def main():
     except:
         print "=============TRACKBACK============="
         print traceback.format_exc() 
-
-
 
